@@ -1,14 +1,13 @@
 import gym
 
 def create_env():
-    env = gym.make("CartPole-v1")
-    observation = env.reset()
-    for _ in range(1000):
-        env.render()
-        action = env.action_space.sample()  
-        observation, reward, done, info = env.step(action)
-        if done:
-            observation = env.reset()
+    env = gym.make("CartPole-v1", render_mode="human")  # specify render_mode
+    observation, _ = env.reset()
+    for _ in range(100):
+        action = env.action_space.sample()
+        observation, reward, terminated, truncated, info = env.step(action)
+        if terminated or truncated:
+            observation, _ = env.reset()
     env.close()
 
 if __name__ == "__main__":

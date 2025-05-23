@@ -33,3 +33,8 @@ If you get no attribute 'bool8' error, then Downgrade NumPy
 ```bash
 pip install numpy==1.23.5
 ```
+
+### 6. Authors
+
+- [Chethas Anil Reddy](https://github.com/ChethasReddy)
+- [Yejun](https://github.com/madman13131313)

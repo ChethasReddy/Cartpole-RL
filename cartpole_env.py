@@ -10,5 +10,8 @@ def create_env():
             observation, _ = env.reset()
     env.close()
 
+def create_cartpole_env(render_mode=None):
+    return gym.make("CartPole-v1", render_mode=render_mode)
+
 if __name__ == "__main__":
     create_env()

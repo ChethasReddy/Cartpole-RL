@@ -14,7 +14,7 @@ def train_dqn(episodes=500):
     action_dim = env.action_space.n
 
     agent = DQNAgent(state_dim, action_dim)
-    target_update_freq = 5
+    target_update_freq = 10
 
     episode_rewards = []
 
@@ -54,6 +54,7 @@ def plot_rewards(rewards):
     plt.title("DQN Training Performance")
     plt.grid(True)
     plt.tight_layout()
+    plt.savefig("results/dqn_rewards.png")
     plt.show()
 
 

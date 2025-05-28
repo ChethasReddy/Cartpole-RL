@@ -36,7 +36,7 @@ class DQNAgent:
         self.target_network.load_state_dict(self.q_network.state_dict())
         self.target_network.eval()
 
-        self.optimizer = optim.Adam(self.q_network.parameters(), lr=5e-4)
+        self.optimizer = optim.Adam(self.q_network.parameters(), lr=1e-3)
         self.criterion = nn.MSELoss()
 
         self.memory = deque(maxlen=10000)

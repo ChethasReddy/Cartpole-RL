@@ -5,16 +5,15 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from dqn_agent import DQNAgent
-from cartpole_env import create_cartpole_env  # optional helper
 
 
 def train_dqn(episodes=500):
-    env = create_cartpole_env(render_mode=None)
+    env = gym.make("CartPole-v1", render_mode=None)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
 
     agent = DQNAgent(state_dim, action_dim)
-    target_update_freq = 10
+    target_update_freq = 5
 
     episode_rewards = []
 
@@ -54,12 +53,11 @@ def plot_rewards(rewards):
     plt.title("DQN Training Performance")
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig("results/dqn_rewards.png")
     plt.show()
 
 
 def evaluate_agent(agent, episodes=5):
-    env = create_cartpole_env(render_mode="human")
+    env = gym.make("CartPole-v1", render_mode="human")
     agent.epsilon = 0.0  # disable exploration
 
     for ep in range(episodes):

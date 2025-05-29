@@ -1,0 +1,146 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import random
+import copy
+import numpy as np
+from collections import deque
+from models import DQN
+
+class DQNAgent:
+    def __init__(self, state_dim, action_dim):
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+
+        self.q_network = DQN(state_dim, action_dim)
+        self.target_network = DQN(state_dim, action_dim)
+        self.target_network.load_state_dict(self.q_network.state_dict())
+        self.target_network.eval()
+
+        self.optimizer = optim.Adam(self.q_network.parameters(), lr=1e-3)
+        self.criterion = nn.MSELoss()
+
+        self.memory = deque(maxlen=10000)
+        self.batch_size = 64
+        self.gamma = 0.99
+
+        self.epsilon = 1.0
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
+
+        self.fitness = -np.inf  # Used in evolution
+
+    def act(self, state, exploit=False):
+        if not exploit and np.random.rand() < self.epsilon:
+            return random.randint(0, self.action_dim - 1)
+        with torch.no_grad():
+            state_tensor = torch.FloatTensor(state).unsqueeze(0)
+            return self.q_network(state_tensor).argmax().item()
+
+    def remember(self, state, action, reward, next_state, done):
+        self.memory.append((state, action, reward, next_state, done))
+
+    def update(self):
+        if len(self.memory) < self.batch_size:
+            return
+
+        batch = random.sample(self.memory, self.batch_size)
+        states, actions, rewards, next_states, dones = zip(*batch)
+
+        states = torch.FloatTensor(states)
+        actions = torch.LongTensor(actions).unsqueeze(1)
+        rewards = torch.FloatTensor(rewards).unsqueeze(1)
+        next_states = torch.FloatTensor(next_states)
+        dones = torch.FloatTensor(dones).unsqueeze(1)
+
+        current_q = self.q_network(states).gather(1, actions)
+        next_q = self.target_network(next_states).max(1)[0].unsqueeze(1)
+        target_q = rewards + (1 - dones) * self.gamma * next_q
+
+        loss = self.criterion(current_q, target_q.detach())
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+    def update_target_network(self):
+        self.target_network.load_state_dict(self.q_network.state_dict())
+
+    def decay_epsilon(self):
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+    def clone(self):
+        clone = DQNAgent(self.state_dim, self.action_dim)
+        clone.q_network.load_state_dict(self.q_network.state_dict())
+        return clone
+
+class EvolutionManager:
+    def __init__(self, env, state_dim, action_dim, agent_class, population_size=10, elite_frac=0.2, mutation_rate=0.1):
+        self.env = env
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.agent_class = agent_class
+        self.population_size = population_size
+        self.elite_size = int(elite_frac * population_size)
+        self.mutation_rate = mutation_rate
+
+        self.population = [agent_class(state_dim, action_dim) for _ in range(population_size)]
+
+    def evaluate_fitness(self, agent, train_episodes=5, eval_episodes=3):
+        # --- Training phase ---
+        agent.epsilon = 1.0  # allow exploration
+        for _ in range(train_episodes):
+            state, _ = self.env.reset()
+            done = False
+            while not done:
+                action = agent.act(state)
+                next_state, reward, terminated, truncated, _ = self.env.step(action)
+                done = terminated or truncated
+                agent.remember(state, action, reward, next_state, done)
+                agent.update()
+                state = next_state
+            agent.decay_epsilon()
+        agent.update_target_network()
+
+        # --- Evaluation phase ---
+        total_reward = 0
+        agent.epsilon = 0.0  # no exploration
+        for _ in range(eval_episodes):
+            state, _ = self.env.reset()
+            done = False
+            while not done:
+                action = agent.act(state, exploit=True)
+                state, reward, terminated, truncated, _ = self.env.step(action)
+                done = terminated or truncated
+                total_reward += reward
+
+        avg_reward = total_reward / eval_episodes
+        agent.fitness = avg_reward
+        return avg_reward
+
+    def evolve(self):
+        for agent in self.population:
+            self.evaluate_fitness(agent)
+
+        self.population.sort(key=lambda agent: agent.fitness, reverse=True)
+        elites = self.population[:self.elite_size]
+
+        new_population = elites.copy()
+        while len(new_population) < self.population_size:
+            parent = copy.deepcopy(random.choice(elites))
+            self.mutate(parent)
+            new_population.append(parent)
+
+        self.population = new_population
+
+    def mutate(self, agent):
+        for param in agent.q_network.parameters():
+            if len(param.shape) == 2:
+                noise = torch.randn_like(param) * self.mutation_rate
+                param.data += noise
+            elif len(param.shape) == 1:
+                noise = torch.randn_like(param) * self.mutation_rate
+                param.data += noise
+
+    def get_best_agent(self):
+        return max(self.population, key=lambda agent: agent.fitness)

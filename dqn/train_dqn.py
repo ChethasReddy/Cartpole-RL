@@ -1,10 +1,9 @@
-# train_dqn.py
-
 import gym
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from dqn_agent import DQNAgent
+from utils import evaluate_agent
 
 
 def train_dqn(episodes=500):
@@ -55,28 +54,7 @@ def plot_rewards(rewards):
     plt.tight_layout()
     plt.show()
 
-
-def evaluate_agent(agent, episodes=5):
-    env = gym.make("CartPole-v1", render_mode="human")
-    agent.epsilon = 0.0  # disable exploration
-
-    for ep in range(episodes):
-        state, _ = env.reset()
-        done = False
-        total_reward = 0
-
-        while not done:
-            action = agent.act(state)
-            state, reward, terminated, truncated, _ = env.step(action)
-            done = terminated or truncated
-            total_reward += reward
-
-        print(f"Evaluation Episode {ep}: Total Reward = {total_reward}")
-
-    env.close()
-
-
 if __name__ == "__main__":
     rewards, trained_agent = train_dqn()
     plot_rewards(rewards)
-    evaluate_agent(trained_agent)
+    evaluate_agent(trained_agent, episodes=5, render=True)

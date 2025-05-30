@@ -43,10 +43,8 @@ class DQNAgent:
     def update(self):
         if len(self.memory) < self.batch_size:
             return
-
         batch = random.sample(self.memory, self.batch_size)
         states, actions, rewards, next_states, dones = zip(*batch)
-
         states = torch.FloatTensor(states)
         actions = torch.LongTensor(actions).unsqueeze(1)
         rewards = torch.FloatTensor(rewards).unsqueeze(1)
@@ -83,12 +81,11 @@ class EvolutionManager:
         self.population_size = population_size
         self.elite_size = int(elite_frac * population_size)
         self.mutation_rate = mutation_rate
-
         self.population = [agent_class(state_dim, action_dim) for _ in range(population_size)]
 
     def evaluate_fitness(self, agent, train_episodes=5, eval_episodes=3):
-        # --- Training phase ---
-        agent.epsilon = 1.0  # allow exploration
+        steps_used = 0
+        agent.epsilon = 1.0
         for _ in range(train_episodes):
             state, _ = self.env.reset()
             done = False
@@ -99,12 +96,13 @@ class EvolutionManager:
                 agent.remember(state, action, reward, next_state, done)
                 agent.update()
                 state = next_state
+                steps_used += 1
             agent.decay_epsilon()
         agent.update_target_network()
 
-        # --- Evaluation phase ---
+        # Evaluation
         total_reward = 0
-        agent.epsilon = 0.0  # no exploration
+        agent.epsilon = 0.0
         for _ in range(eval_episodes):
             state, _ = self.env.reset()
             done = False
@@ -113,14 +111,17 @@ class EvolutionManager:
                 state, reward, terminated, truncated, _ = self.env.step(action)
                 done = terminated or truncated
                 total_reward += reward
+                steps_used += 1
 
         avg_reward = total_reward / eval_episodes
         agent.fitness = avg_reward
-        return avg_reward
+        return avg_reward, steps_used
 
     def evolve(self):
+        total_steps = 0
         for agent in self.population:
-            self.evaluate_fitness(agent)
+            _, steps = self.evaluate_fitness(agent)
+            total_steps += steps
 
         self.population.sort(key=lambda agent: agent.fitness, reverse=True)
         elites = self.population[:self.elite_size]
@@ -132,15 +133,12 @@ class EvolutionManager:
             new_population.append(parent)
 
         self.population = new_population
+        return total_steps
 
     def mutate(self, agent):
         for param in agent.q_network.parameters():
-            if len(param.shape) == 2:
-                noise = torch.randn_like(param) * self.mutation_rate
-                param.data += noise
-            elif len(param.shape) == 1:
-                noise = torch.randn_like(param) * self.mutation_rate
-                param.data += noise
+            noise = torch.randn_like(param) * self.mutation_rate
+            param.data += noise
 
     def get_best_agent(self):
         return max(self.population, key=lambda agent: agent.fitness)

@@ -58,7 +58,7 @@ def train_dqn(episodes=700, solve_threshold=195, window=100):
 
             if solved_at_step is None and avg_reward >= solve_threshold:
                 solved_at_step = total_env_steps
-                print(f"✅ Environment solved at episode {episode}, step {solved_at_step}, avg reward = {avg_reward:.2f}")
+                print(f"Environment solved at episode {episode}, step {solved_at_step}, avg reward = {avg_reward:.2f}")
 
             if avg_reward >= solve_threshold:
                 reach_times += 1
@@ -68,12 +68,12 @@ def train_dqn(episodes=700, solve_threshold=195, window=100):
     env.close()
 
     if solved_at_step is None:
-        print("❌ Environment not solved during training.")
+        print("Environment not solved during training.")
     else:
-        print(f"✅ Sample efficiency: solved in {solved_at_step} environment steps. Reached {reach_times} times.")
+        print(f"Sample efficiency: solved in {solved_at_step} environment steps. Reached {reach_times} times.")
 
     final_avg_reward = np.mean(episode_rewards[-window:])
-    print(f"📈 Final average reward over last {window} episodes: {final_avg_reward:.2f}")
+    print(f"Final average reward over last {window} episodes: {final_avg_reward:.2f}")
 
     return episode_rewards, sample_eff_steps, sample_eff_rewards, agent
 

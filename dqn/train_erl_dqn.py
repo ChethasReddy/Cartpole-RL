@@ -48,7 +48,7 @@ def train_erl_dqn(env_name="CartPole-v1", generations=30, population_size=15, to
 
         if solved_at_step is None and top_k_avg_reward >= 195:
             solved_at_step = total_env_steps
-            print(f"✅ Environment solved at step {solved_at_step}")
+            print(f"Environment solved at step {solved_at_step}")
 
         if top_k_avg_reward >= 195:
             reach_times += 1

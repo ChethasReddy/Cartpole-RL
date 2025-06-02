@@ -76,6 +76,7 @@ class Agent(AgentConfig, EvolutionConfig):
         solved = False
 
         while not solved:
+            print(f"\nEpisode {episode + 1}")
             # Evolutionary Phase
             for gen in range(self.evolution_epochs):
                 # Evaluate all policies in the population
@@ -102,7 +103,8 @@ class Agent(AgentConfig, EvolutionConfig):
 
                 # Fine-tune with PPO
                 for _ in range(self.ppo_epochs):
-                    self.train_ppo_episode()
+                    reward = self.train_ppo_episode()
+                    print(f"PPO Episode Reward: {reward:.2f}")
 
                 # Update policy in population with fine-tuned weights
                 policy.load_state_dict(self.policy_network.state_dict())

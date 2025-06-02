@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from dqn_agent import DQNAgent
 from utils import evaluate_agent
 
-def train_dqn(episodes=500, solve_threshold=195, window=100):
+def train_dqn(episodes=700, solve_threshold=195, window=100):
     env = gym.make("CartPole-v1", render_mode=None)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
@@ -16,12 +16,15 @@ def train_dqn(episodes=500, solve_threshold=195, window=100):
     episode_rewards = []
     total_env_steps = 0
     solved_at_step = None
+    reach_times = 0
 
     # For sample efficiency plot
     sample_eff_steps = []
     sample_eff_rewards = []
 
-    for episode in range(episodes):
+    episode = 0
+    while episode <= episodes and total_env_steps < 100000:
+        episode += 1
         state, _ = env.reset()
         total_reward = 0
         done = False
@@ -57,6 +60,9 @@ def train_dqn(episodes=500, solve_threshold=195, window=100):
                 solved_at_step = total_env_steps
                 print(f"✅ Environment solved at episode {episode}, step {solved_at_step}, avg reward = {avg_reward:.2f}")
 
+            if avg_reward >= solve_threshold:
+                reach_times += 1
+
         print(f"Episode {episode}: reward = {total_reward:.2f}, epsilon = {agent.epsilon:.3f}, steps = {steps_this_episode}")
 
     env.close()
@@ -64,7 +70,10 @@ def train_dqn(episodes=500, solve_threshold=195, window=100):
     if solved_at_step is None:
         print("❌ Environment not solved during training.")
     else:
-        print(f"✅ Sample efficiency: solved in {solved_at_step} environment steps.")
+        print(f"✅ Sample efficiency: solved in {solved_at_step} environment steps. Reached {reach_times} times.")
+
+    final_avg_reward = np.mean(episode_rewards[-window:])
+    print(f"📈 Final average reward over last {window} episodes: {final_avg_reward:.2f}")
 
     return episode_rewards, sample_eff_steps, sample_eff_rewards, agent
 

@@ -128,9 +128,11 @@ class EvolutionManager:
 
         new_population = elites.copy()
         while len(new_population) < self.population_size:
-            parent = copy.deepcopy(random.choice(elites))
-            self.mutate(parent)
-            new_population.append(parent)
+            parent1 = random.choice(elites)
+            parent2 = random.choice(elites)
+            child = self.crossover(parent1, parent2)
+            self.mutate(child)
+            new_population.append(child)
 
         self.population = new_population
         return total_steps
@@ -139,6 +141,17 @@ class EvolutionManager:
         for param in agent.q_network.parameters():
             noise = torch.randn_like(param) * self.mutation_rate
             param.data += noise
+
+    def crossover(self, parent1, parent2):
+        """Create a new agent by mixing parameters from two parents."""
+        child = parent1.clone()
+        with torch.no_grad():
+            for child_param, p1_param, p2_param in zip(child.q_network.parameters(),
+                                                       parent1.q_network.parameters(),
+                                                       parent2.q_network.parameters()):
+                mask = torch.rand_like(child_param) < 0.5
+                child_param.copy_(torch.where(mask, p1_param, p2_param))
+        return child
 
     def get_best_agent(self):
         return max(self.population, key=lambda agent: agent.fitness)

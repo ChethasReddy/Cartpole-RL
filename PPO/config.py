@@ -17,14 +17,14 @@ class AgentConfig:
 
 class EvolutionConfig:
     # Evolutionary Algorithm Parameters
-    population_size = 50
-    num_generations = 30
+    population_size = 10
+    num_generations = 20
     mutation_rate = 0.1
     mutation_scale = 0.1
     tournament_size = 5
     elite_size = 1
 
     # Hybrid Training Parameters
-    evolution_epochs = 3  # Number of evolutionary generations before PPO fine-tuning
+    evolution_epochs = 5  # Number of evolutionary generations before PPO fine-tuning
     ppo_epochs = 3  # Number of PPO updates after evolution
     num_ppo_policies = 3  # Number of top policies to fine-tune with PPO

@@ -14,3 +14,17 @@ class AgentConfig:
     memory_size = 400
 
     train_cartpole = True
+
+class EvolutionConfig:
+    # Evolutionary Algorithm Parameters
+    population_size = 50
+    num_generations = 30
+    mutation_rate = 0.1
+    mutation_scale = 0.1
+    tournament_size = 5
+    elite_size = 1
+
+    # Hybrid Training Parameters
+    evolution_epochs = 3  # Number of evolutionary generations before PPO fine-tuning
+    ppo_epochs = 3  # Number of PPO updates after evolution
+    num_ppo_policies = 3  # Number of top policies to fine-tune with PPO

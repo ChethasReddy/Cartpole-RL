@@ -5,168 +5,221 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import copy
 
-from config import AgentConfig
+from config import AgentConfig, EvolutionConfig
 from network import MlpPolicy
+from evolution import EvolutionaryAlgorithm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-class Agent(AgentConfig):
+class Agent(AgentConfig, EvolutionConfig):
     def __init__(self):
         self.env = gym.make('CartPole-v1')
         self.action_size = int(self.env.action_space.n)  # 2 for cartpole
-        if self.train_cartpole:
-            self.policy_network = MlpPolicy(action_size=self.action_size).to(device)
+
+        # Initialize evolutionary algorithm
+        self.evolution = EvolutionaryAlgorithm(population_size=self.population_size)
+        self.evolution.initialize_population(self.action_size)
+
+        # Initialize PPO components
+        self.policy_network = MlpPolicy(action_size=self.action_size).to(device)
         self.optimizer = optim.Adam(self.policy_network.parameters(), lr=self.learning_rate)
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=self.k_epoch,
                                                    gamma=0.999)
         self.loss = 0
         self.criterion = nn.MSELoss()
+        self.reset_memory()
+
+        self.reward_history = []
+        self.avg_reward = []
+
+    def reset_memory(self):
+        """Reset the memory buffer"""
         self.memory = {
-            'state': [], 'action': [], 'reward': [], 'next_state': [], 'action_prob': [], 'terminal': [], 'count': 0,
-            'advantage': [], 'td_target': torch.FloatTensor([])
+            'state': [],
+            'action': [],
+            'reward': [],
+            'next_state': [],
+            'action_prob': [],
+            'terminal': [],
+            'advantage': [],
+            'td_target': []
         }
 
-    def new_random_game(self):
-        state, _ = self.env.reset()
-        action = self.env.action_space.sample()
-        next_state, reward, terminated, truncated, _ = self.env.step(action)
-        terminal = bool(terminated or truncated)
-        return next_state, float(reward), action, terminal
+    def evaluate_policy(self, policy, num_episodes=5):
+        """Evaluate a policy's performance"""
+        total_rewards = []
+        for _ in range(num_episodes):
+            state, _ = self.env.reset()
+            episode_reward = 0
+            done = False
+
+            while not done:
+                with torch.no_grad():
+                    state_tensor = torch.FloatTensor(state).to(device)
+                    action_probs = policy.pi(state_tensor)
+                    action = torch.distributions.Categorical(action_probs).sample().item()
+
+                next_state, reward, terminated, truncated, _ = self.env.step(action)
+                done = bool(terminated or truncated)
+                episode_reward += float(reward)
+                state = next_state
+
+            total_rewards.append(episode_reward)
+
+        return np.mean(total_rewards)
 
     def train(self):
         episode = 0
-        step = 0
-        reward_history = []
-        avg_reward = []
         solved = False
 
-        # A new episode
         while not solved:
-            start_step = step
-            episode += 1
-            episode_length = 0
+            # Evolutionary Phase
+            for gen in range(self.evolution_epochs):
+                # Evaluate all policies in the population
+                for i, policy in enumerate(self.evolution.population):
+                    fitness = self.evaluate_policy(policy)
+                    self.evolution.fitness_scores[i] = float(fitness)
 
-            # Get initial state
-            state, reward, action, terminal = self.new_random_game()
-            current_state = state
-            total_episode_reward = 1.0
+                # Update best policy
+                self.evolution.update_best_policy()
 
-            # A step in an episode
-            while not solved:
-                step += 1
-                episode_length += 1
+                # Evolve population
+                self.evolution.evolve()
 
-                # Choose action
-                prob_a = self.policy_network.pi(torch.FloatTensor(current_state).to(device))
-                action = torch.distributions.Categorical(prob_a).sample().item()
+                print(f'Generation {gen + 1}, Best Fitness: {self.evolution.best_fitness:.2f}')
 
-                # Act
-                next_state, reward, terminated, truncated, _ = self.env.step(action)
-                terminal = bool(terminated or truncated)
-                reward = float(reward)
+            # PPO Fine-tuning Phase
+            # Select top policies for PPO fine-tuning
+            sorted_indices = np.argsort(self.evolution.fitness_scores)[-self.num_ppo_policies:]
+            top_policies = [self.evolution.population[i] for i in sorted_indices]
 
-                reward = -1.0 if terminal else reward
+            for policy in top_policies:
+                # Copy policy weights to PPO network
+                self.policy_network.load_state_dict(policy.state_dict())
 
-                self.add_memory(current_state, action, reward/10.0, next_state, terminal, prob_a[action].item())
+                # Fine-tune with PPO
+                for _ in range(self.ppo_epochs):
+                    self.train_ppo_episode()
 
-                current_state = next_state
-                total_episode_reward += reward
+                # Update policy in population with fine-tuned weights
+                policy.load_state_dict(self.policy_network.state_dict())
 
-                if terminal:
-                    episode_length = step - start_step
-                    reward_history.append(total_episode_reward)
-                    avg_reward.append(sum(reward_history[-10:])/10.0)
+            # Check if solved
+            if self.evolution.best_fitness >= 195:
+                solved = True
+                print("Environment solved!")
 
-                    self.finish_path(episode_length)
-
-                    if len(reward_history) > 100 and sum(reward_history[-100:-1]) / 100 >= 195:
-                        solved = True
-
-                    print('episode: %.2f, total step: %.2f, last_episode length: %.2f, last_episode_reward: %.2f, '
-                          'loss: %.4f, lr: %.4f' % (episode, step, episode_length, total_episode_reward, self.loss,
-                                                    self.scheduler.get_lr()[0]))
-
-                    state, _ = self.env.reset()
-                    current_state = state
-
-                    break
-
-            if episode % self.update_freq == 0:
-                for _ in range(self.k_epoch):
-                    self.update_network()
-
+            # Plot progress
             if episode % self.plot_every == 0:
-                plot_graph(reward_history, avg_reward)
+                plot_graph(self.reward_history, self.avg_reward)
+
+            episode += 1
 
         self.env.close()
 
-    def update_network(self):
-        # get ratio
-        pi = self.policy_network.pi(torch.FloatTensor(self.memory['state']).to(device))
-        new_probs_a = torch.gather(pi, 1, torch.tensor(self.memory['action']))
-        old_probs_a = torch.FloatTensor(self.memory['action_prob'])
-        ratio = torch.exp(torch.log(new_probs_a) - torch.log(old_probs_a))
+    def train_ppo_episode(self):
+        """Train one episode using PPO"""
+        state, _ = self.env.reset()
+        episode_reward = 0
+        done = False
 
-        # surrogate loss
-        surr1 = ratio * torch.FloatTensor(self.memory['advantage'])
-        surr2 = torch.clamp(ratio, 1 - self.eps_clip, 1 + self.eps_clip) * torch.FloatTensor(self.memory['advantage'])
-        pred_v = self.policy_network.v(torch.FloatTensor(self.memory['state']).to(device))
-        v_loss = 0.5 * (pred_v - self.memory['td_target']).pow(2)  # Huber loss
-        entropy = torch.distributions.Categorical(pi).entropy()
-        entropy = torch.tensor([[e] for e in entropy])
-        self.loss = (-torch.min(surr1, surr2) + self.v_coef * v_loss - self.entropy_coef * entropy).mean()
+        # Reset memory for new episode
+        self.reset_memory()
 
-        self.optimizer.zero_grad()
-        self.loss.backward()
-        self.optimizer.step()
-        self.scheduler.step()
+        while not done:
+            # Choose action
+            prob_a = self.policy_network.pi(torch.FloatTensor(state).to(device))
+            action = torch.distributions.Categorical(prob_a).sample().item()
+
+            # Act
+            next_state, reward, terminated, truncated, _ = self.env.step(action)
+            terminal = bool(terminated or truncated)
+            reward = float(reward)
+
+            reward = -1.0 if terminal else reward
+
+            self.add_memory(state, action, reward/10.0, next_state, terminal, prob_a[action].item())
+
+            state = next_state
+            episode_reward += reward
+
+            if terminal:
+                self.finish_path()
+                self.update_network()
+                break
+
+        self.reward_history.append(episode_reward)
+        self.avg_reward.append(sum(self.reward_history[-10:])/10.0)
+
+        return episode_reward
 
     def add_memory(self, s, a, r, next_s, t, prob):
-        if self.memory['count'] < self.memory_size:
-            self.memory['count'] += 1
-        else:
-            self.memory['state'] = self.memory['state'][1:]
-            self.memory['action'] = self.memory['action'][1:]
-            self.memory['reward'] = self.memory['reward'][1:]
-            self.memory['next_state'] = self.memory['next_state'][1:]
-            self.memory['terminal'] = self.memory['terminal'][1:]
-            self.memory['action_prob'] = self.memory['action_prob'][1:]
-            self.memory['advantage'] = self.memory['advantage'][1:]
-            self.memory['td_target'] = self.memory['td_target'][1:]
-
+        """Add a transition to memory"""
         self.memory['state'].append(s)
         self.memory['action'].append([a])
         self.memory['reward'].append([r])
         self.memory['next_state'].append(next_s)
         self.memory['terminal'].append([1 - t])
-        self.memory['action_prob'].append(prob)
+        self.memory['action_prob'].append([prob])
 
-    def finish_path(self, length):
-        state = self.memory['state'][-length:]
-        reward = self.memory['reward'][-length:]
-        next_state = self.memory['next_state'][-length:]
-        terminal = self.memory['terminal'][-length:]
+    def finish_path(self):
+        """Calculate advantages and TD targets for the episode"""
+        states = torch.FloatTensor(self.memory['state']).to(device)
+        rewards = torch.FloatTensor(self.memory['reward'])
+        next_states = torch.FloatTensor(self.memory['next_state']).to(device)
+        terminals = torch.FloatTensor(self.memory['terminal'])
 
-        td_target = torch.FloatTensor(reward) + \
-                    self.gamma * self.policy_network.v(torch.FloatTensor(next_state)) * torch.FloatTensor(terminal)
-        delta = td_target - self.policy_network.v(torch.FloatTensor(state))
-        delta = delta.detach().numpy()
+        # Calculate TD targets
+        with torch.no_grad():
+            next_values = self.policy_network.v(next_states).squeeze()
+            values = self.policy_network.v(states).squeeze()
 
-        # get advantage
-        advantages = []
-        adv = 0.0
-        for d in delta[::-1]:
-            adv = self.gamma * self.lmbda * adv + d[0]
-            advantages.append([adv])
-        advantages.reverse()
+        td_target = rewards + self.gamma * next_values * terminals
+        advantages = td_target - values
 
-        if self.memory['td_target'].shape == torch.Size([1, 0]):
-            self.memory['td_target'] = td_target.data
-        else:
-            self.memory['td_target'] = torch.cat((self.memory['td_target'], td_target.data), dim=0)
-        self.memory['advantage'] += advantages
+        self.memory['td_target'] = td_target.tolist()
+        self.memory['advantage'] = advantages.tolist()
+
+    def update_network(self):
+        """Update the network using PPO"""
+        # Convert memory to tensors
+        states = torch.FloatTensor(self.memory['state']).to(device)
+        actions = torch.LongTensor(self.memory['action']).to(device)
+        old_probs = torch.FloatTensor(self.memory['action_prob']).to(device)
+        advantages = torch.FloatTensor(self.memory['advantage']).to(device)
+        td_targets = torch.FloatTensor(self.memory['td_target']).to(device)
+
+        # Get new action probabilities
+        new_probs = self.policy_network.pi(states)
+        new_probs_a = torch.gather(new_probs, 1, actions)
+
+        # Calculate ratio
+        ratio = torch.exp(torch.log(new_probs_a) - torch.log(old_probs))
+
+        # Calculate surrogate losses
+        surr1 = ratio * advantages
+        surr2 = torch.clamp(ratio, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
+
+        # Calculate value loss
+        pred_v = self.policy_network.v(states)
+        v_loss = 0.5 * (pred_v - td_targets).pow(2)
+
+        # Calculate entropy
+        entropy = torch.distributions.Categorical(new_probs).entropy()
+
+        # Total loss
+        self.loss = (-torch.min(surr1, surr2).mean() +
+                    self.v_coef * v_loss.mean() -
+                    self.entropy_coef * entropy.mean())
+
+        # Optimize
+        self.optimizer.zero_grad()
+        self.loss.backward()
+        self.optimizer.step()
+        self.scheduler.step()
 
 
 def plot_graph(reward_history, avg_reward):

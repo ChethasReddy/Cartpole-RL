@@ -55,7 +55,37 @@ python visualize_model.py
 
 This will show the trained agent balancing the pole in real-time for 5 episodes.
 
-### 6. Troubleshooting
+### 6. Running DQN and Evolutionary DQN
+
+You can also run implementations of classic DQN and a hybrid Evolutionary DQN (ERL-DQN):
+
+### Running DQN
+
+```bash
+cd dqn
+
+python train_dqn.py
+```
+This script will train a Deep Q-Network agent on CartPole-v1. It will display training progress (episode reward and number of steps), and generate a plot:
+
+- A reward curve showing average reward per episode.
+
+### Running Evolutionary DQN
+
+```bash
+python train_erl_dqn.py
+```
+This script trains a population of agents using a hybrid Evolutionary Reinforcement Learning algorithm. During training, it will print:
+- Generation index
+
+- Best and average rewards
+
+- Total number of environment steps used
+
+It will also produce: 
+- A graph of top agent rewards across generations.
+
+### 7. Troubleshooting
 
 If you get no attribute 'bool8' error, then Downgrade NumPy
 
@@ -63,7 +93,7 @@ If you get no attribute 'bool8' error, then Downgrade NumPy
 pip install numpy==1.23.5
 ```
 
-### 7. Authors
+### 8. Authors
 
 - [Chethas Anil Reddy](https://github.com/ChethasReddy)
 - [Chaitanya shashi kumar](https://github.com/chaitanya2108)

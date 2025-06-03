@@ -76,7 +76,10 @@ class Agent(AgentConfig, EvolutionConfig):
         solved = False
 
         while not solved:
+<<<<<<< HEAD
             print(f"\nEpisode {episode + 1}")
+=======
+>>>>>>> 3bd563f (made hybrid evolutionary reinforcement Algorithm using PPO)
             # Evolutionary Phase
             for gen in range(self.evolution_epochs):
                 # Evaluate all policies in the population
@@ -103,8 +106,12 @@ class Agent(AgentConfig, EvolutionConfig):
 
                 # Fine-tune with PPO
                 for _ in range(self.ppo_epochs):
+<<<<<<< HEAD
                     reward = self.train_ppo_episode()
                     print(f"PPO Episode Reward: {reward:.2f}")
+=======
+                    self.train_ppo_episode()
+>>>>>>> 3bd563f (made hybrid evolutionary reinforcement Algorithm using PPO)
 
                 # Update policy in population with fine-tuned weights
                 policy.load_state_dict(self.policy_network.state_dict())

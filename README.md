@@ -66,4 +66,5 @@ pip install numpy==1.23.5
 ### 7. Authors
 
 - [Chethas Anil Reddy](https://github.com/ChethasReddy)
+- [Chaitanya shashi kumar](https://github.com/chaitanya2108)
 - [Yejun](https://github.com/madman13131313)
